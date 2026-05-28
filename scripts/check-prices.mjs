@@ -52,32 +52,61 @@ async function scrapePrice(asin) {
 async function checkPrices() {
   console.log('Starting price check:', new Date().toISOString())
 
-  const { data: watches, error } = await supabase
+  // Fetch all active watches
+  const { data: watches, error: watchError } = await supabase
     .from('watches')
-    .select('*, user_profiles!inner(telegram_chat_id, telegram_verified)')
+    .select('*')
     .eq('is_active', true)
-    .eq('user_profiles.telegram_verified', true)
 
-  if (error) {
-    console.error('Failed to fetch watches:', error.message)
+  if (watchError) {
+    console.error('Failed to fetch watches:', watchError.message)
     process.exit(1)
   }
 
-  console.log(`Checking ${watches.length} active watches`)
+  if (!watches || watches.length === 0) {
+    console.log('No active watches found')
+    process.exit(0)
+  }
 
-  for (const watch of watches) {
+  // Get unique user IDs from watches
+  const userIds = [...new Set(watches.map(w => w.user_id))]
+
+  // Fetch profiles for those users
+  const { data: profiles, error: profileError } = await supabase
+    .from('user_profiles')
+    .select('id, telegram_chat_id, telegram_verified')
+    .in('id', userIds)
+    .eq('telegram_verified', true)
+
+  if (profileError) {
+    console.error('Failed to fetch profiles:', profileError.message)
+    process.exit(1)
+  }
+
+  // Build a map of user_id -> telegram_chat_id
+  const chatIdMap = {}
+  for (const profile of profiles) {
+    chatIdMap[profile.id] = profile.telegram_chat_id
+  }
+
+  // Filter watches to only those with a connected Telegram
+  const activeWatches = watches.filter(w => chatIdMap[w.user_id])
+  console.log(`Checking ${activeWatches.length} watches with Telegram connected`)
+
+  for (const watch of activeWatches) {
     try {
-      console.log(`Checking ASIN ${watch.asin} (${watch.product_title})`)
+      console.log(`Checking ASIN ${watch.asin} — ${watch.product_title}`)
 
       const currentPrice = await scrapePrice(watch.asin)
 
       if (!currentPrice) {
-        console.log(`Could not get price for ${watch.asin} - skipping`)
+        console.log(`Could not get price for ${watch.asin} — skipping`)
         continue
       }
 
-      console.log(`Current price: $${currentPrice}, Target: $${watch.target_price}`)
+      console.log(`Current: $${currentPrice} | Target: $${watch.target_price}`)
 
+      // Update current price in database
       await supabase
         .from('watches')
         .update({
@@ -86,8 +115,9 @@ async function checkPrices() {
         })
         .eq('id', watch.id)
 
+      // Check if target is hit
       if (currentPrice <= watch.target_price) {
-        const chatId = watch.user_profiles.telegram_chat_id
+        const chatId = chatIdMap[watch.user_id]
         const savings = (watch.original_price - currentPrice).toFixed(2)
         const savingsPct = (((watch.original_price - currentPrice) / watch.original_price) * 100).toFixed(0)
         const referralUrl = `https://www.amazon.com/dp/${watch.asin}?tag=${ASSOCIATE_TAG}`
@@ -107,7 +137,7 @@ async function checkPrices() {
         ].join('\n')
 
         await sendTelegramMessage(chatId, message)
-        console.log(`Alert sent to ${chatId} for ${watch.asin}`)
+        console.log(`✅ Alert sent to ${chatId} for ${watch.asin}`)
 
         await supabase.from('alert_log').insert({
           watch_id: watch.id,
@@ -115,8 +145,11 @@ async function checkPrices() {
           price_at_alert: currentPrice,
           original_price: watch.original_price,
         })
+      } else {
+        console.log(`Price $${currentPrice} has not hit target $${watch.target_price} yet`)
       }
 
+      // Wait 2 seconds between requests to be respectful
       await new Promise(resolve => setTimeout(resolve, 2000))
 
     } catch (err) {
