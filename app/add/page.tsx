@@ -17,6 +17,7 @@ export default function AddProductPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [targetType, setTargetType] = useState<'percent' | 'fixed'>('percent')
   const [targetValue, setTargetValue] = useState('')
+  const [shipsToIsrael, setShipsToIsrael] = useState(false)
   const [lookupLoading, setLookupLoading] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [error, setError] = useState('')
@@ -78,6 +79,7 @@ export default function AddProductPage() {
           target_type: targetType,
           target_value: parseFloat(targetValue),
           referral_url: product.referral_url,
+          ships_to_israel: shipsToIsrael,
         }),
       })
 
@@ -282,6 +284,24 @@ export default function AddProductPage() {
                 </p>
               </div>
             )}
+
+            {/* Israel Shipping Toggle */}
+            <div className="mb-5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={shipsToIsrael}
+                  onChange={(e) => setShipsToIsrael(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-900">
+                  Only alert me when this product ships free to Israel
+                </span>
+              </label>
+              <p className="text-xs text-gray-400 mt-1.5 ml-7">
+                Check Amazon&apos;s delivery options for your address before enabling this.
+              </p>
+            </div>
 
             {/* Save Button */}
             <button

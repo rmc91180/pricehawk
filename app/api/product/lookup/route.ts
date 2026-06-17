@@ -4,21 +4,44 @@ import { createClient } from '@/lib/supabase/server'
 
 const ASSOCIATE_TAG = process.env.AMAZON_ASSOCIATE_TAG || 'pricehawk0b-20'
 
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+]
+
 async function scrapeAmazonProduct(asin: string) {
   const targetUrl = `https://www.amazon.com/dp/${asin}`
-  const scraperUrl = `http://api.scraperapi.com?api_key=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(targetUrl)}&country_code=us`
+  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
 
-  const res = await fetch(scraperUrl, {
+  const res = await fetch(targetUrl, {
     headers: {
+      'User-Agent': userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Upgrade-Insecure-Requests': '1',
     },
   })
 
   if (!res.ok) {
-    throw new Error(`ScraperAPI returned ${res.status}`)
+    throw new Error(`Amazon returned ${res.status}`)
   }
 
   const html = await res.text()
+
+  if (
+    html.includes('api-services-support@amazon.com') ||
+    html.includes('Type the characters you see in this image')
+  ) {
+    throw new Error('Amazon is showing a CAPTCHA. Please try again in a few minutes.')
+  }
 
   let title = 'Unknown Product'
   const titleMatch = html.match(/id="productTitle"[^>]*>\s*([^<]+)/i)
@@ -74,14 +97,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Could not find a valid Amazon product in that URL.' },
         { status: 400 }
-      )
-    }
-
-    const scraperKey = process.env.SCRAPER_API_KEY
-    if (!scraperKey) {
-      return NextResponse.json(
-        { error: 'ScraperAPI key not configured.' },
-        { status: 500 }
       )
     }
 

@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     target_type,
     target_value,
     referral_url,
+    ships_to_israel,
   } = body
 
   // Calculate the target price for easy comparison later
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       target_value,
       target_price,
       referral_url,
+      ships_to_israel: ships_to_israel ?? false,
       is_active: true,
     })
     .select()

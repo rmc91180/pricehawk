@@ -7,7 +7,13 @@ const supabase = createClient(
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const ASSOCIATE_TAG = process.env.AMAZON_ASSOCIATE_TAG || 'pricehawk0b-20'
-const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY
+
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+]
 
 async function sendTelegramMessage(chatId, text) {
   const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`
@@ -20,10 +26,29 @@ async function sendTelegramMessage(chatId, text) {
 
 async function scrapePrice(asin) {
   const targetUrl = `https://www.amazon.com/dp/${asin}`
-  const scraperUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(targetUrl)}&country_code=us`
-  const res = await fetch(scraperUrl)
-  if (!res.ok) throw new Error(`ScraperAPI error: ${res.status}`)
+  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+  const res = await fetch(targetUrl, {
+    headers: {
+      'User-Agent': userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Upgrade-Insecure-Requests': '1',
+    },
+  })
+  if (!res.ok) throw new Error(`Amazon error: ${res.status}`)
   const html = await res.text()
+  if (
+    html.includes('api-services-support@amazon.com') ||
+    html.includes('Type the characters you see in this image')
+  ) {
+    throw new Error('Amazon is showing a CAPTCHA. Please try again in a few minutes.')
+  }
   const pricePatterns = [
     /class="a-price-whole">([0-9,]+)</i,
     /"priceAmount":([0-9.]+)/i,
@@ -107,6 +132,7 @@ async function checkPrices() {
           '🔔 <b>Price Alert - PriceHawk</b>',
           '',
           `📦 ${watch.product_title}`,
+          ...(watch.ships_to_israel ? ['🌍 Ships free to Israel: ✅ confirmed by user'] : []),
           '',
           `💰 Now: <b>$${currentPrice.toFixed(2)}</b>`,
           `📉 Was: $${watch.original_price.toFixed(2)}`,

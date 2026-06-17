@@ -15,6 +15,7 @@ type Watch = {
   target_value: number
   target_price: number
   referral_url: string
+  ships_to_israel: boolean
   is_active: boolean
   created_at: string
 }
@@ -166,7 +167,12 @@ export default function DashboardPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-4">
-                        <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">{watch.product_title}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">{watch.product_title}</p>
+                          {watch.ships_to_israel && (
+                            <span className="inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">🌍 IL Shipping</span>
+                          )}
+                        </div>
                         <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${status.color}`}>{status.label}</span>
                       </div>
                       <p className="text-xs text-gray-400 mt-1 mb-3">ASIN: {watch.asin}</p>
